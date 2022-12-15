@@ -196,11 +196,6 @@ impl CheckpointExecutorEventLoop {
         while let Some((last_checkpoint, next_committee)) =
             self.execute_checkpoints_for_epoch().await
         {
-            // TODO
-            println!(
-                "TESTING -- End of epoch at checkpoint {:?}",
-                last_checkpoint.sequence_number()
-            );
             self.reconfig(next_committee, last_checkpoint.epoch()).await;
             self.checkpoint_store
                 .update_highest_executed_checkpoint(&last_checkpoint)
@@ -257,11 +252,15 @@ impl CheckpointExecutorEventLoop {
                 Some(Ok((checkpoint, next_committee))) = pending.next() => {
                     match next_committee {
                         None => {
-                            // TODO
-                            println!(
-                                "TESTING -- Checkpoint {:?} does not have a committee",
-                                checkpoint.sequence_number(),
-                            );
+                            let prev_highest = self.checkpoint_store.get_highest_executed_checkpoint_seq_number().unwrap();
+
+                            // Ensure that we are not skipping checkpoints at any point
+                            if let Some(prev) = prev_highest {
+                                assert_eq!(prev + 1, checkpoint.sequence_number());
+                            } else {
+                                assert_eq!(checkpoint.sequence_number(), 0);
+                            }
+
                             let new_highest = checkpoint.sequence_number();
                             debug!(
                                 "Bumping highest_executed_checkpoint watermark to {:?}",
@@ -278,12 +277,6 @@ impl CheckpointExecutorEventLoop {
                         Some(committee) => {
                             debug!(
                                 "Last checkpoint ({:?}) of epoch {:?} has finished execution",
-                                checkpoint.sequence_number(),
-                                checkpoint.epoch(),
-                            );
-                            // TODO
-                            println!(
-                                "TESTING -- Last checkpoint ({:?}) of epoch {:?} has finished execution",
                                 checkpoint.sequence_number(),
                                 checkpoint.epoch(),
                             );
@@ -317,8 +310,6 @@ impl CheckpointExecutorEventLoop {
                     }
                     Err(RecvError::Closed) => {
                         info!("Checkpoint Execution Sender (StateSync) closed channel");
-                        // TODO
-                        println!("TESTING -- Checkpoint Execution Sender (StateSync) closed channel");
                         return None;
                     }
                 },
@@ -389,14 +380,10 @@ impl CheckpointExecutorEventLoop {
         // checkpoints that *need* to be scheduled and the number of tasks available
         // to schedule within
         let checkpoints_diff = latest_synced_checkpoint.sequence_number() - next_to_exec + 1;
-        // TODO
-        println!("TESTING -- TASK LIMIT: {:?}", self.task_limit);
-        println!("TESTING -- PENDING LEN: {:?}", pending.len());
         let tasks_diff = self.task_limit - pending.len();
         let num_tasks_to_schedule = std::cmp::min(checkpoints_diff, tasks_diff as u64);
 
-        // get all checkpoints to be scheduled, less the last (which we got already above)
-        let range: Vec<u64> = (next_to_exec..(next_to_exec + num_tasks_to_schedule)).collect();
+        let range: Vec<u64> = (next_to_exec..(next_to_exec + num_tasks_to_schedule - 1)).collect();
 
         let mut checkpoints_to_schedule = self
             .checkpoint_store
@@ -406,26 +393,10 @@ impl CheckpointExecutorEventLoop {
             .collect::<Vec<VerifiedCheckpoint>>();
 
         checkpoints_to_schedule.sort_by_key(|a| a.sequence_number());
-        checkpoints_to_schedule.push(latest_synced_checkpoint);
         let checkpoints_to_schedule = checkpoints_to_schedule;
         debug!(
             "Scheduling {:?} lagging checkpoints",
             checkpoints_to_schedule.len(),
-        );
-
-        // TODO
-        println!(
-            "TESTING -- Number of checkpoints scheduling for catch up: {:?}",
-            checkpoints_to_schedule.len()
-        );
-
-        // TODO
-        println!(
-            "TESTING -- Sequence numbers being scheduled: {:?}",
-            checkpoints_to_schedule
-                .iter()
-                .map(|cp| cp.sequence_number())
-                .collect::<Vec<CheckpointSequenceNumber>>(),
         );
 
         for checkpoint in checkpoints_to_schedule.into_iter() {
@@ -489,9 +460,6 @@ impl CheckpointExecutorEventLoop {
         next_committee: Vec<(AuthorityPublicKeyBytes, u64)>,
         current_epoch: u64,
     ) {
-        // TODO
-        println!("TESTING -- signaling reconfig...");
-
         let end_of_epoch_message = EndOfEpochMessage {
             next_committee,
             next_epoch: current_epoch + 1,

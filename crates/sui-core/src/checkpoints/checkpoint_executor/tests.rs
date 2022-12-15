@@ -129,10 +129,6 @@ pub async fn test_checkpoint_executor_cross_epoch() {
         None,
         &first_committee,
     );
-    println!(
-        "TESTING -- number of checkpoints just synced: {:?}",
-        cold_start_checkpoints.len()
-    );
 
     // sync end of epoch checkpoint
     let last_executed_checkpoint = cold_start_checkpoints.last().cloned().unwrap();
@@ -155,19 +151,12 @@ pub async fn test_checkpoint_executor_cross_epoch() {
     let (_handle, mut reconfig_channel) = executor.start().unwrap();
     tokio::time::sleep(Duration::from_secs(5)).await;
 
-    // TODO
-    println!(
-        "TESTING -- highest executed: {:?}, num to sync per epoch: {:?}",
-        checkpoint_store
-            .get_highest_executed_checkpoint_seq_number()
-            .unwrap(),
-        num_to_sync_per_epoch,
-    );
-
-    // We should have only synced up to epoch boundary
+    // We should have synced up to epoch boundary - 1. The -1  is because we do
+    // not ratchet the highest executed checkpoint watermark until after
+    // reconfig is successful
     assert!(matches!(
         checkpoint_store.get_highest_executed_checkpoint_seq_number().unwrap(),
-        Some(highest) if highest == (num_to_sync_per_epoch as u64),
+        Some(highest) if highest == (num_to_sync_per_epoch as u64) - 1,
     ));
 
     // Ensure we have end of epoch notification
